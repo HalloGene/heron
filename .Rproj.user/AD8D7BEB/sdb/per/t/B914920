@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1488737169080.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "B914920",
+    "lastKnownWriteTime" : 1488737212,
+    "last_content_update" : 1488737212033,
+    "path" : "~/Projects/heron/src/launcher.R",
+    "project_path" : "src/launcher.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

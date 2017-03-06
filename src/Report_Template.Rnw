@@ -1,0 +1,401 @@
+\documentclass{article}
+\usepackage{hyperref}
+\usepackage{listings}
+\lstset{language=R, basicstyle=\small, breaklines=true, includerangemarker=false}
+\title{Log file analysis using R Language machine learning packages}
+\author{Yevgen Golubenko, 90001}
+\begin{document}
+\SweaveOpts{concordance=TRUE,prefix.string=Yevgen}
+\begin{figure}
+  \begin{center}
+     \includegraphics[width=4cm]{Logo.png}
+  \end{center}
+\end{figure}
+
+\begin{center}
+  {\bf\Large Final project}
+\end{center}
+\begin{center}
+  {\bf\Large "Log file analysis using R Language machine learning packages"}
+\end{center}
+\begin{center}
+  {\Large Yevgen Golubenko, 90001}
+\end{center}
+
+
+\begin{abstract}
+Server log files are extremly useful for web attacks detection. There are many tools and platforms which provide services in detecting threats using log files. As a core of any such system there is a machine learning model. In this work I'll try to parse a log sample and run different supervised machine learning model on it usng R Languages packages. 
+\end{abstract}
+
+\maketitle
+\tableofcontents
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%         Introduction         %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\indent
+    As Wikipedia states "In computing, a logfile is a file that records either events that occur in an operating system or other software runs, or messages between different users of a communication software. Logging is the act of keeping a log. In the simplest case, messages are written to a single logfile."
+\newline\newline\indent
+Going a little in details a server log is a log file (or several files) automatically created and maintained by a server consisting of a list of activities it performed.
+\newline\newline\indent
+A typical example is a web server log which maintains a history of page requests. The W3C maintains a standard format (the Common Log Format) for web server log files, but other proprietary formats exist. More recent entries are typically appended to the end of the file. Information about the request, including client IP address, request date/time, page requested, HTTP code, bytes served, user agent, and referrer are typically added. This data can be combined into a single file, or separated into distinct logs, such as an access log, error log, or referrer log. However, server logs typically do not collect user-specific information.
+\newline\newline\indent
+These files are usually not accessible to general Internet users, only to the webmaster or other administrative person. A statistical analysis of the server log may be used to examine traffic patterns by time of day, day of week, referrer, or user agent. Efficient web site administration, adequate hosting resources and the fine tuning of sales efforts can be aided by analysis of the web server logs. Marketing departments of any organization that owns a website should be trained to understand these powerful tools.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%       Problem definition     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Problem definition}
+\indent
+First we got to get a log file. AS it was stated before only web sites admins have access to the log files. However google indexes some of them when people forget to block it. So we can get one. For this paper we'll use a sample of Apache Server log. The good part is thath this file has standard record format and can be parsed by R function. Our sample has 1900 records. Let's see few of them for example.
+
+<<label=read_data, echo=TRUE>>=
+setwd("/Users/ygolubenko/GoogleDrive/CSC_633-1_Machine_Learning/FinalProject");
+################################ 
+#        Parsing Log           #
+################################
+# reading log
+LOGS    = read.table('mainSample.log', sep=' ', fill=T, header=F);
+# let's clean up our data a little
+# Combine two our date time columns
+# together and conver them into date time format
+LOGS$V4 = as.POSIXct(paste(as.character(LOGS$V4),
+            as.character(LOGS$V5)), format='[%d/%b/%Y:%I:%M:%S %z]');
+# According to the log specification " - " is a missing value
+# 'rfc931' (The identifier used to identify the
+# client making the HTTP request) and 'username'
+# are always missing in our sample. Let's get rid of them.
+LOGS    = LOGS[, c( -3, -2)];
+# Convert IP Adress and Referrer columns to string
+LOGS$V1 = as.character(LOGS$V1);
+LOGS$V9 = as.character(LOGS$V9);
+# Converting status into a factor
+LOGS$V6 = as.factor(LOGS$V6);
+# It'd be better to have size as a number rather than a factor
+# missing values let mark as for '-1' instead of '-'
+LOGS$V7 = as.character(LOGS$V7);
+LOGS$V7[which(LOGS$V7 == '-')] = '-1'; 
+LOGS$V7 = as.integer(LOGS$V7);
+# And Finally lets give columns normal names
+colnames(LOGS) <- c("IP_ADDRESS", "DATE_TIME",
+          'REQUEST', 'STATUS', 'SIZE', 'REFERRER', 'USER_AGENT');
+print(LOGS[10,]);
+@
+
+\indent
+There ar ecompanies which provide service of classifying whether any of these records is a potential threat or no. These companies has some importnat knowledgebase which can be called intelligence. And a services which are running models of classyfying new records in real time as harmful or not.
+\indent
+Let's try to build such models.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%          Approaches          %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Approaches}
+\indent 
+We're done with the first part. We have the log turned into a dataset with 10 features. Two of them were not useful and we got rid of them.
+\newline\newline\indent 
+Now let's prepare The intelligence. Usually this is a paid data and service from a third party. Or it can be accumulated and collected by the own security department of the company. We do not have any of these options. But to implement a concept we might not need all this. We can simulate it by including one more column into our dataset which will classify every record in two classes. Or into more classes if we want to classify not only "threat or not" but "what kind of threat".
+\newline\newline\indent 
+
+<<label=prep_res_data, echo=TRUE>>=
+################################ 
+#        Preparations          #
+################################
+rm(list=ls());
+setwd("/Users/ygolubenko/GoogleDrive/CSC_633-1_Machine_Learning/FinalProject");
+################################ 
+#        Parsing Log           #
+################################
+# reading log
+LOGS = read.table('mainSample.log', sep=' ', fill=T, header=F);
+# let's clean up our data a little
+# Combine two our date time columns together and conver them into date time format
+LOGS$V4 = as.POSIXct(paste(as.character(LOGS$V4), as.character(LOGS$V5)), format='[%d/%b/%Y:%I:%M:%S %z]');
+# According to the log specification " - " is a missing value
+# 'rfc931' (The identifier used to identify the client making the HTTP request) and 'username'
+# are always missing in our sample. Let's get rid of them.
+LOGS    = LOGS[, c( -3, -2)];
+# Convert IP Adress and Referrer columns to string
+LOGS$V1 = as.character(LOGS$V1);
+LOGS$V9 = as.character(LOGS$V9);
+# Converting status into a factor
+LOGS$V6 = as.factor(LOGS$V6);
+# It'd be better to have size as a number rather than a factor
+# missing values let mark as for '-1' instead of '-'
+LOGS$V7 = as.character(LOGS$V7);
+LOGS$V7[which(LOGS$V7 == '-')] = '-1'; 
+LOGS$V7 = as.integer(LOGS$V7);
+LOGS$V5 <- gsub(" .*$", "", as.character(LOGS$V5));
+LOGS$V5 <- as.factor(LOGS$V5);
+LOGS$V9 <- gsub(" .*$", "", as.character(LOGS$V9));
+LOGS$V9 <- as.factor(LOGS$V9);
+# And Finally lets give columns normal names
+colnames(LOGS) <- c("IP_ADDRESS", "DATE_TIME", 'REQUEST_METHOD', 'STATUS', 'SIZE', 'REFERRER', 'USER_AGENT');
+# let's have a look
+#View(LOGS[10:14,]);
+# omitting NA values
+LOGS <- na.omit(LOGS);
+
+# Let's process our IP Addresses
+# package iptools allow to do some interesting things with IP addresses 
+# install.packages('iptools');
+library(iptools);
+# getting list of ips
+ips <- sort(levels(as.factor(LOGS$IP_ADDRESS)));
+classified_ips <- ip_classify(ips);
+classified_ips[1:5];
+ips <- sample(ips, 55, replace = FALSE);
+for (i in 1:length(ips)) {
+  LOGS <- LOGS[!(LOGS$IP_ADDRESS == ips[i]), ]
+}
+# Current dataset hasmany different IP. More than a 100.
+# Having them as a factor will break our training/classification because it can't process factor data with more than 53 levels.
+
+# Let's not use DATE-TIME columns for classification 
+LOGS = LOGS[, -2];
+@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     Experimental Results     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experimental Results}
+\subsection{Preparations}
+<<label=preps, echo=True, fig=False>>=
+################################ 
+#     PREPARE INTELLIGENCE     #
+################################
+# Adding column which marks record whether it is threat or not
+LOGS$IS_THREAT <- rep(0,nrow(LOGS));
+# Let's generate some threats
+# sample 25% this list and marking them as malware
+ips <- sort(levels(as.factor(LOGS$IP_ADDRESS)));
+threat_ips <- sample(ips, length(ips) * 0.25 );
+# let's say every record with size < 0 or too big is harmful
+# if it is already marked as harmful umark it
+LOGS$IS_THREAT[which(LOGS$SIZE < 0 || LOGS$SIZE > 30000)] <- 1;
+# making ip addresses a factor column
+LOGS$IS_THREAT[which(ip_in_range(ips, "65.55.210.15/50") == TRUE)] <- (LOGS$IS_THREAT[
+  which(ip_in_range(ips, "65.55.210.15/50") == TRUE)] + 1) %% 2;
+# and if status is not 200 lest make it "mal" too if it wasn't before
+LOGS$IS_THREAT[which(LOGS$STATUS != '200')] <- 1;
+LOGS$STATUS[which(LOGS$STATUS != '200')]
+LOGS$IP_ADDRESS <- as.factor(LOGS$IP_ADDRESS)
+remaining <- which(LOGS$IS_THREAT != 1)
+rem_sample <- sample(remaining, length(remaining)*0.15)
+LOGS$IS_THREAT[rem_sample] <- 1;
+LOGS$IS_THREAT <- as.factor(LOGS$IS_THREAT);
+cat(sprintf('Now we have %i "malvare" records.\nWhich is %f percent of all records.',
+      sum(LOGS$IS_THREAT == '1'), sum(LOGS$IS_THREAT == '1')*100/length(LOGS$IS_THREAT)));
+all <- 1:nrow(LOGS);
+train_sample <- sample(all, length(all)*0.7);
+test_sample  <- all[ !all %in% train_sample];
+test  <-  LOGS[ test_sample, ];
+testX  <- LOGS[ test_sample, 1:6];
+testY  <- LOGS[ test_sample,   7];
+train  <- LOGS[ train_sample, ];
+trainX <- LOGS[ train_sample, 1:6];
+trainY <- LOGS[ train_sample,   7];
+# print(testY)
+# print(trainY)
+@
+
+\subsection{Ridge }
+Let's try to perform some Ridge regression.
+\indent
+<<label=ridge, echo=True, fig=TRUE>>=
+################################ 
+#           Ridge              #
+################################
+library("ridge")
+mydata    <- LOGS;
+targetCol <- 8;
+Err   <- matrix(nrow = 31, ncol = 3)
+betas <- matrix(nrow = 31, ncol = 8)
+
+for(iLambda in seq(from = 0, to = 30)){
+  exp <- (+3 -4*(iLambda/20))
+  xlambda <- 10^exp
+  
+  testErr <- 0.0
+  trainErr <- 0.0
+  
+  Xin  <- as.data.frame(cbind(cbind(train$SIZE, as.numeric(train$STATUS),
+                                    as.numeric(train$IS_THREAT) - 1)))
+  Xout <- as.data.frame(cbind(testX$SIZE,  as.numeric(testX$STATUS)))
+  Yin  <- as.numeric(trainY) - 1
+  Yout <- as.numeric(testY) - 1
+  mod  <- linearRidge(V3~., data=Xin, lambda=xlambda)
+  trainErr <- sum((Yin - predict(mod, Xin))^2)/length(Yin)	
+  testErr  <- sum((Yout - predict(mod, Xout))^2)/length(Yout)	
+  Err[(iLambda+1), 1] = trainErr
+  Err[(iLambda+1), 2] = testErr
+  Err[(iLambda+1), 3] = xlambda
+}
+
+compBestLambda <- function (Err) {
+  min(Err[,2])
+  which(Err[,2]==min(Err[,2]))
+  index <- which(Err[,2]==min(Err[,2])) 
+  print(paste("index = ", index)) 
+  print(paste("best lambda = ",Err[index,3]))
+  return(Err[index,3])
+}
+bestLambda <- compBestLambda(Err)
+
+plotXvalErr <- function (Err, bestLambda, mainTitle, texty) {
+  oldpar <- par(no.readonly=TRUE) # record current setting
+  # no.readonly means to only save the things that can be changed
+  par(mar=rep(4, 4)) # make the margins smaller for RStudio
+  plot(Err[,1], type='p', col='red', pch=15,
+       main = mainTitle,
+       ylab='Error',
+       xlab= paste("lambda from ", Err[1,3], " to ", Err[31,3],
+                   ": best Lambda = ", bestLambda),
+       ylim=c(min(min(Err[,1]),min(Err[,2])),max(max(Err[,1]),max(Err[,2]))))
+  lines(Err[,1], type='l', col='red')
+  points(Err[,2], pch=16, col='blue')
+  lines(Err[,2], type='l', col='blue')
+  legend("right", c("TRAIN", "TEST"), cex = 0.5, col = c("red", "blue"),
+         pch = c(15, 16), lty = 1:2)
+  text(16, texty, paste("Min Error = ",signif(min(Err[,2]),5)),
+       cex = 0.8)
+}
+mainTitle = 'STATUS and SIZE - Error vs Log(Lambda)'
+texty <- 0.8
+plotXvalErr(Err, bestLambda, mainTitle, texty)
+min(Err[,2])
+which(Err[,2]==min(Err[,2]))
+@
+
+\subsection{Random Forest}
+Now running random forest.
+\indent
+%\begin{figure}
+<<label=random_forest, echo=True>>=
+testX  <- LOGS[ train_sample, 1:6];
+testY  <- LOGS[ train_sample,   7];
+trainX <- LOGS[  test_sample, 1:6];
+trainY <- LOGS[  test_sample,   7];
+library(randomForest);
+fit<-randomForest(trainX, trainY)
+train_err <- 1 - sum(trainY == predict(fit, trainX))/length(trainY);
+test_err  <- 1 - sum(testY  == predict(fit, testX)) /length(testY);
+cat(sprintf("For Random Forrest:\n   Train error is %f and Test error is %f\n",
+            train_err, test_err));
+@
+
+\subsection{Ensemble}
+\indent
+<<label=ensemble, echo=True, fig=TRUE>>=
+################################ 
+#          ENSEMBLE            #
+################################
+library(rpart);
+library(MASS);
+holdoutdata <- test;
+holdoutdata[, 7] <- as.numeric(holdoutdata[, 7]) 
+traindata <- train;
+traindata[, 7] <- as.numeric(traindata[, 7]) 
+exponent <- seq(from=3, to=0, by=-0.2)
+Err <-matrix(0.0, length(exponent),3)
+nColSamp = 3;
+Err <- matrix(0.0, length(exponent), 3)
+Icol <- 1:6
+Irow <- 1:nrow(traindata)
+nxval <- 3;  
+IndexMat <- matrix(0.0, nColSamp, 6);
+for (icol in 1:3){
+  Isamp <- sample(Icol, nColSamp, replace=FALSE)
+  IndexMat[,icol] <- Isamp
+}  
+for(ilambda in 1:length(exponent)){
+  xlambda <- 10^(exponent[ilambda]);
+  testErr <- 0.0;
+  trainErr <- 0.0;
+  for(ixval in 1:nxval) {
+    xNewOut <- NULL;
+    xNewIn <- NULL;
+    xFullOut <- holdoutdata[,1:6];
+    Yout     <- holdoutdata[,7];
+    xFullIn  <- traindata[,1:6];
+    Yin      <- traindata[,7];
+    for(icol in 1:3){
+      nColSamp <- IndexMat[,icol]
+      xTempIn <- xFullIn[,nColSamp]
+      xTempOut <- xFullOut[,nColSamp]
+      dataSet <- cbind(xTempIn,Yin)
+      fit <- rpart(Yin~., dataSet)
+      xNewIn <- cbind(xNewIn,predict(fit,xTempIn))
+      xNewOut <- cbind(xNewOut,predict(fit,xTempOut))
+    }
+    Xin <- as.matrix(xNewIn)
+    Xout <- as.matrix(xNewOut)
+    mod <- lm.ridge(Yin~Xin,lambda=xlambda)
+    C <- mod$coef/mod$scales
+    XM <- Xin
+    for(i in seq(from = 1, to = ncol(Xin))){
+      XM[,i] <- Xin[,i]-mod$xm[i]
+    } 
+    xTemp <- as.matrix(XM)
+    A <- as.array(C)
+    Yh <- xTemp%*%A + mod$ym
+    trainErr <- trainErr + sum((Yh-Yin)^2)/(nrow(as.matrix(Yin))*10)	
+    XM <- Xout
+    for(i in seq(from = 1, to = ncol(Xout))){
+      XM[,i]<-Xout[,i]-mod$xm[i]
+    } 
+    xTemp <- as.matrix(XM)
+    A <- as.array(C)
+    Yh <- xTemp%*%A +mod$ym
+    testErr <- testErr + sum((Yh-Yout)^2)/(nrow(as.matrix(Yout))*10)		
+  }
+    
+  Err[ilambda,1] <- testErr
+  Err[ilambda,2] <- trainErr
+  Err[ilambda,3] <- xlambda
+}
+
+minimum = min(min(Err[, 1]), min(Err[, 2]));
+maximum = max(max(Err[, 1]), max(Err[, 2]));
+
+par(mfrow=c(1,2))
+plot(Err[, 3], Err[, 1], main="Test", col='red',  ylab = 'Error', xlab = 'Lambda',
+     ylim=c(min(Err[, 1]), max(Err[, 1])));
+plot(Err[, 3], Err[, 2], main="Train", col='blue',  ylab = 'Error', xlab = 'Lambda',
+     ylim=c(min(Err[, 2]), max(Err[, 2])));
+@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%     Conclusions and ideas for future work     %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusions and ideas for future work}
+Let's sum up some results of this project. R could parse and create a dataset for work with machine learning from a server log. However this project provides just basic way of obtaining a set of features. Doing it this way we got a problem that having too many levels in factor columns can block training of the machine learning models in R. There is a limit of only 53 levels.
+\newline\newline\indent
+Ridge regression allowed us to create only simple model based of 2 numeric features. The result was good even though it didn't cont all features of the dataset.
+\newline\newline\indent
+Random forest worked perfectly. It allowed to input factor features and gave good result. Better than ridge.
+\newline\newline\indent
+Ensemble method was the most interestin and a little tricky to be tuned. However it paid off. Best error level for test and training runs.
+\newline\newline\indent
+This is a wide field for the future work. In particular dataset can be prepared better. Make the "Intelligence" smarter and potentially classify every feature separately. This will allow to make the data continuous like the level of benighness of every feature and I expect this can make the predicitons more accurate.
+\newline\newline\indent
+As a second option I consider to try to run neural networks algorithms and deep learning.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%         Related Work         %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  \section{Related Work}
+    \begin{enumerate}
+      \item Alspaugh S., Ganapathi A., Chen B., Hearst M., Lin J., Katz R. Analyzing Log Analysis: An Empirical Study of User Log Mining\
+    \end{enumerate}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%      References section      %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  \section{References}
+    \begin{itemize}
+      \item http://people.ischool.berkeley.edu/~hearst/papers/lisa2014-final-version.pdf
+      \item https://www.usenix.org/system/files/1403\_11-15\_tsoukalos.pdf
+      \item https://en.wikipedia.org/wiki/Logfile
+      \item https://en.wikipedia.org/wiki/Server\_log
+      \item https://www.quora.com/Are-there-any-free-large-datasets-in-the-format-of-an-Apache-access-log
+  \end{itemize}
+\end{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%       End of document        %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
